@@ -9,10 +9,27 @@ from reportlab.lib.utils import ImageReader
 from PIL import Image, ImageDraw, ImageFont
 import os
 import tempfile
+import base64
+from pathlib import Path
 
 st.set_page_config(page_title="Excel to PDF 変換ツール", layout="wide")
 st.title("Excel to PDF 変換ツール")
 st.subheader("Excelファイルを読み込み、氏名欄に名前と電子印を追加してPDFに変換します")
+
+FONT_PATH = None
+possible_font_paths = [
+    '/usr/share/fonts/truetype/fonts-japanese-gothic.ttf',
+    '/usr/share/fonts/truetype/ipafont-gothic/ipag.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    '/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',  # macOS
+    'C:/Windows/Fonts/msgothic.ttc',  # Windows
+]
+
+for font_path in possible_font_paths:
+    if Path(font_path).exists():
+        FONT_PATH = font_path
+        break
 
 def create_seal(name, size=(100, 100), color=(255, 0, 0, 128)):
     """
@@ -32,7 +49,10 @@ def create_seal(name, size=(100, 100), color=(255, 0, 0, 128)):
     draw.ellipse([(0, 0), size], outline=color[:3], fill=color, width=3)
     
     try:
-        font = ImageFont.truetype('/usr/share/fonts/truetype/fonts-japanese-gothic.ttf', size[0]//4)
+        if FONT_PATH:
+            font = ImageFont.truetype(FONT_PATH, size[0]//4)
+        else:
+            font = ImageFont.load_default()
     except IOError:
         font = ImageFont.load_default()
     
@@ -57,18 +77,18 @@ def excel_to_pdf(df, name_column, name_value, seal_image):
     Returns:
     bytes: 生成されたPDFのバイトデータ
     """
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
-        temp_filename = temp_file.name
-    
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    try:
-        pdfmetrics.registerFont(TTFont('HeiseiKakuGo-W5', '/usr/share/fonts/truetype/fonts-japanese-gothic.ttf'))
-        font_name = 'HeiseiKakuGo-W5'
-    except:
-        font_name = 'Helvetica'
+    font_name = 'Helvetica'  # デフォルトフォント
+    
+    if FONT_PATH:
+        try:
+            pdfmetrics.registerFont(TTFont('Japanese', FONT_PATH))
+            font_name = 'Japanese'
+        except Exception as e:
+            st.warning(f"日本語フォントの登録に失敗しました: {e}")
     
     c.setFont(font_name, 16)
     c.drawString(50, height - 50, "Excel データ")
@@ -80,6 +100,10 @@ def excel_to_pdf(df, name_column, name_value, seal_image):
     for i, col in enumerate(df.columns):
         c.drawString(50 + i * col_width, y_position, str(col))
     
+    seal_temp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    seal_image.save(seal_temp.name)
+    seal_temp.close()
+    
     c.setFont(font_name, 10)
     for i, row in enumerate(df.itertuples()):
         y_position = height - 100 - i * 20
@@ -88,24 +112,29 @@ def excel_to_pdf(df, name_column, name_value, seal_image):
             if df.columns[j] == name_column and name_value:
                 c.drawString(50 + j * col_width, y_position, f"{val} ({name_value})")
                 
-                seal_temp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-                seal_image.save(seal_temp.name)
-                seal_temp.close()
-                
                 seal_size = 20
                 seal_x = 50 + j * col_width + len(str(val)) * 5 + len(name_value) * 5 + 15
                 seal_y = y_position - 5
                 
                 c.drawImage(seal_temp.name, seal_x, seal_y, width=seal_size, height=seal_size)
-                os.unlink(seal_temp.name)
             else:
                 c.drawString(50 + j * col_width, y_position, str(val))
+    
+    os.unlink(seal_temp.name)
     
     c.save()
     pdf_data = buffer.getvalue()
     buffer.close()
     
     return pdf_data
+
+def get_binary_file_downloader_html(bin_data, file_label='File', file_name='output.pdf'):
+    """
+    バイナリデータをダウンロードするためのHTMLリンクを生成する（フォールバック用）
+    """
+    b64 = base64.b64encode(bin_data).decode()
+    href = f'<a href="data:application/pdf;base64,{b64}" download="{file_name}">{file_label}</a>'
+    return href
 
 def main():
     uploaded_file = st.file_uploader("Excelファイルをアップロードしてください", type=["xlsx", "xls"])
@@ -137,15 +166,25 @@ def main():
                 
                 if st.button("PDFに変換"):
                     with st.spinner("PDFを生成中..."):
-                        pdf_data = excel_to_pdf(df, name_column, name_value, seal_image)
-                        
-                        st.success("PDFの生成が完了しました！")
-                        st.download_button(
-                            label="PDFをダウンロード",
-                            data=pdf_data,
-                            file_name="output.pdf",
-                            mime="application/pdf"
-                        )
+                        try:
+                            pdf_data = excel_to_pdf(df, name_column, name_value, seal_image)
+                            
+                            st.success("PDFの生成が完了しました！")
+                            
+                            st.download_button(
+                                label="PDFをダウンロード",
+                                data=pdf_data,
+                                file_name="output.pdf",
+                                mime="application/pdf"
+                            )
+                            
+                            st.markdown(
+                                get_binary_file_downloader_html(pdf_data, "ダウンロードボタンが機能しない場合はこちらをクリック"),
+                                unsafe_allow_html=True
+                            )
+                        except Exception as e:
+                            st.error(f"PDF生成中にエラーが発生しました: {str(e)}")
+                            st.exception(e)
             else:
                 st.info("名前を入力すると電子印のプレビューが表示されます")
                 
