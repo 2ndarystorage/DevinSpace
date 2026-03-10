@@ -12,3 +12,14 @@
 
 ## Completion Status
 - Usable: core upload/preview/convert/download flow is implemented, but there’s no packaging, tests, or CLI, and font path assumptions may limit portability.
+
+## Program Summary
+- Streamlit UI converts an uploaded Excel sheet to a PDF while adding a typed name and a generated seal image in a selected column.
+- Sample data generator script exists at `streamlit_app/sample_data.py`.
+
+## How to Use
+- Not verified: install dependencies implied by `streamlit_app/app.py` and run `streamlit run streamlit_app/app.py`.
+- Use the UI to upload an Excel file, select the target column, enter a name, optionally pick seal color, then generate and download the PDF.
+
+## Completion Status
+- Usable (demo): core flow appears implemented, but there are no tests, no packaging, and hardcoded font paths may limit portability.
