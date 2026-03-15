@@ -45,3 +45,14 @@
 
 ## Completion Status
 - Usable (demo): core UI flow appears implemented, but there are no tests or packaging, and the font path is hardcoded (may reduce portability).
+
+## Program Summary
+- Streamlit app that reads an uploaded Excel file, lets you choose a target column and name, generates a seal image, and exports a PDF with the name + seal placed in that column.
+- Includes a small script to generate a sample Excel file (`streamlit_app/sample_data.py`).
+
+## How to Use
+- Not verified: install Python dependencies implied by `streamlit_app/app.py`, then run `streamlit run streamlit_app/app.py`.
+- Optional: run `python streamlit_app/sample_data.py` to generate `sample_data.xlsx`, then upload it in the UI.
+
+## Completion Status
+- Usable (demo): core UI flow appears implemented, but there are no tests or packaging, and the font path is hardcoded (may reduce portability).
